@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <title>Árnyékoló Konfigurátor & CAD POC Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f7f6; }
+    .container { display: flex; gap: 20px; }
+    .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .controls { width: 320px; }
+    .viewer { flex-grow: 1; text-align: center; }
+    label { display: block; margin-top: 10px; font-weight: bold; }
+    input, select { width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box; }
+    canvas { border: 1px solid #ccc; background-color: #fafafa; margin-top: 10px; border-radius: 4px; }
+    .result { margin-top: 15px; padding: 10px; background: #eef7ee; border-left: 4px solid #4caf50; }
+    .error { margin-top: 15px; padding: 10px; background: #fde8e8; border-left: 4px solid #f44336; color: #d32f2f; }
+  </style>
+</head>
+<body>
+
+  <h2>Árnyékoló Konfigurátor & CAD POC Demo</h2>
+
+  <div class="container">
+    <!-- VEZÉRLŐ PANEL -->
+    <div class="panel controls">
+      <h3>Paraméterek</h3>
+      
+      <label for="width">Szélesség (mm):</label>
+      <input type="number" id="width" value="3000" min="500" max="6000" step="100">
+
+      <label for="height">Magasság (mm):</label>
+      <input type="number" id="height" value="2000" min="500" max="4000" step="100">
+
+      <label for="color">Szövet Színe:</label>
+      <select id="color">
+        <option value="#34495e">Sötétszürke (Anthracite)</option>
+        <option value="#e67e22">Narancssárga (Classic)</option>
+        <option value="#2c3e50">Sötétkék (Navy)</option>
+        <option value="#ecf0f1">Bézs (Off-White)</option>
+      </select>
+
+      <label for="motor">Motor Típusa:</label>
+      <select id="motor">
+        <option value="25000">Alap motor (25 000 Ft)</option>
+        <option value="45000" selected>Smart / Okos motor (45 000 Ft)</option>
+      </select>
+
+      <div id="output"></div>
+    </div>
+
+    <!-- CAD / VISUALIZER PANEL -->
+    <div class="panel viewer">
+      <h3>2D CAD Vetület & Render</h3>
+      <canvas id="cadCanvas" width="600" height="450"></canvas>
+      <p style="font-size: 0.85em; color: #666;">Méretarányos műszaki előnézet és dimenziók</p>
+    </div>
+  </div>
+
+  <script>
+    // --- 1. ÁRKALUKÁCIÓS LOGIKA (TypeScript/JS) ---
+    class PricingEngine {
+      constructor() {
+        this.VAT_RATE = 1.27; // 27% ÁFA
+        this.MATERIAL_PRICE_PER_SQM = 15000; // 15.000 Ft / m2
+        this.MARGIN_PERCENTAGE = 20; // 20% árrés
+      }
+
+      calculatePrice(widthMm, heightMm, motorBasePrice) {
+        if (widthMm <= 0 || heightMm <= 0) {
+          throw new Error("A dimenzióknak pozitív számnak kell lenniük.");
+        }
+
+        const areaSqm = (widthMm / 1000) * (heightMm / 1000);
+        const rawMaterialPrice = areaSqm * this.MATERIAL_PRICE_PER_SQM;
+        const baseCost = rawMaterialPrice + motorBasePrice;
+        const netTotalPrice = baseCost * (1 + this.MARGIN_PERCENTAGE / 100);
+        const grossTotalPrice = netTotalPrice * this.VAT_RATE;
+
+        return {
+          areaSqm: areaSqm.toFixed(2),
+          netTotalPrice: Math.round(netTotalPrice),
+          grossTotalPrice: Math.round(grossTotalPrice)
+        };
+      }
+    }
+
+    // --- 2. CAD / CANVAS MEGJELENÍTŐ LOGIKA ---
+    class CADRenderer {
+      constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+      }
+
+      render(widthMm, heightMm, colorHex) {
+        const ctx = this.ctx;
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Méretezés & margók kiszámítása
+        const margin = 60;
+        const maxWidth = this.canvas.width - margin * 2;
+        const maxHeight = this.canvas.height - margin * 2;
+
+        const scale = Math.min(maxWidth / widthMm, maxHeight / heightMm);
+        const rectW = widthMm * scale;
+        const rectH = heightMm * scale;
+
+        const startX = (this.canvas.width - rectW) / 2;
+        const startY = (this.canvas.height - rectH) / 2;
+
+        // 1. Keret / Tokozat rajzolása (Műszaki rajz stílus)
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(startX - 5, startY - 15, rectW + 10, 15); // Felső tokozat
+
+        // 2. Árnyékoló anyaga
+        ctx.fillStyle = colorHex;
+        ctx.fillRect(startX, startY, rectW, rectH);
+
+        // 3. Vonalazás / Szövet redők
+        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+        ctx.lineWidth = 1;
+        for (let y = startY + 20; y < startY + rectH; y += 20) {
+          ctx.beginPath();
+          ctx.moveTo(startX, y);
+          ctx.lineTo(startX + rectW, y);
+          ctx.stroke();
+        }
+
+        // 4. CAD Méretezési vonalak & Kóta feliratok
+        ctx.strokeStyle = '#d32f2f';
+        ctx.fillStyle = '#d32f2f';
+        ctx.font = '12px Arial';
+
+        // Szélesség kóta (Fent)
+        ctx.beginPath();
+        ctx.moveTo(startX, startY - 25);
+        ctx.lineTo(startX + rectW, startY - 25);
+        ctx.stroke();
+        ctx.textAlign = 'center';
+        ctx.fillText(`${widthMm} mm`, startX + rectW / 2, startY - 30);
+
+        // Magasság kóta (Balra)
+        ctx.beginPath();
+        ctx.moveTo(startX - 20, startY);
+        ctx.lineTo(startX - 20, startY + rectH);
+        ctx.stroke();
+        ctx.save();
+        ctx.translate(startX - 25, startY + rectH / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.textAlign = 'center';
+        ctx.fillText(`${heightMm} mm`, 0, 0);
+        ctx.restore();
+      }
+    }
+
+    // --- 3. ESEMÉNYKEZELÉS ÉS INTEGRÁCIÓ ---
+    const engine = new PricingEngine();
+    const cad = new CADRenderer('cadCanvas');
+
+    function updateApp() {
+      const width = parseFloat(document.getElementById('width').value);
+      const height = parseFloat(document.getElementById('height').value);
+      const color = document.getElementById('color').value;
+      const motorPrice = parseFloat(document.getElementById('motor').value);
+      const outputDiv = document.getElementById('output');
+
+      try {
+        // Árkalkuláció futtatása
+        const res = engine.calculatePrice(width, height, motorPrice);
+        
+        outputDiv.className = 'result';
+        outputDiv.innerHTML = `
+          <strong>Kalkuláció Eredménye:</strong><br>
+          • Terület: <strong>${res.areaSqm} m²</strong><br>
+          • Nettó ár: <strong>${res.netTotalPrice.toLocaleString()} Ft</strong><br>
+          • Bruttó ár: <strong>${res.grossTotalPrice.toLocaleString()} Ft</strong>
+        `;
+
+        // CAD nézet újrarajzolása
+        cad.render(width, height, color);
+
+      } catch (err) {
+        outputDiv.className = 'error';
+        outputDiv.innerHTML = `<strong>Hiba:</strong> ${err.message}`;
+      }
+    }
+
+    // Event listener-ek bekötése
+    document.querySelectorAll('input, select').forEach(el => {
+      el.addEventListener('input', updateApp);
+    });
+
+    // Kezdeti kirajzolás
+    updateApp();
+  </script>
+</body>
+</html>
